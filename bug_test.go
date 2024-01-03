@@ -6,6 +6,7 @@ import (
 	"net"
 	"strconv"
 	"testing"
+	"log"
 
 	"entgo.io/ent/dialect"
 	_ "github.com/go-sql-driver/mysql"
@@ -14,6 +15,9 @@ import (
 
 	"entgo.io/bug/ent"
 	"entgo.io/bug/ent/enttest"
+	"entgo.io/bug/ent/user"
+
+	_ "entgo.io/bug/ent/runtime"
 )
 
 func TestBugSQLite(t *testing.T) {
@@ -57,8 +61,44 @@ func TestBugMaria(t *testing.T) {
 func test(t *testing.T, client *ent.Client) {
 	ctx := context.Background()
 	client.User.Delete().ExecX(ctx)
-	client.User.Create().SetName("Ariel").SetAge(30).ExecX(ctx)
-	if n := client.User.Query().CountX(ctx); n != 1 {
-		t.Errorf("unexpected number of users: %d", n)
+
+	log.Println("creating user")
+	u, err := client.User.
+		Create().
+		SetAge(30).
+		SetName("a8m").
+		Save(ctx)
+	if err != nil {
+		t.Errorf("unexpected error when creating user: %v", err)
+	}
+
+	log.Println("try update one user")
+	_, err = u.Update().SetAge(20).Save(ctx)
+	if err == nil {
+		t.Errorf("expected error updating one user")
+	}
+
+	log.Println("try update many user")
+	i, err := client.User.Update().Where(user.ID(u.ID)).SetAge(20).Save(ctx)
+	if err != nil {
+		t.Errorf("unexpected error when updating many users: %v", err)
+	}
+	if i != 0 {
+		t.Errorf("expected update many to apply privacy filter")
+	}
+
+	log.Println("try delete many user")
+	i, err = client.User.Delete().Where(user.ID(u.ID)).Exec(ctx)
+	if err != nil {
+		t.Errorf("unexpected error when deleting many users: %v", err)
+	}
+	if i != 0 {
+		t.Errorf("expected delete many to apply privacy filter")
+	}
+
+	log.Println("try delete one user")
+	err = client.User.DeleteOneID(u.ID).Exec(ctx)
+	if err == nil {
+		t.Errorf("expected error deleting one user")
 	}
 }
